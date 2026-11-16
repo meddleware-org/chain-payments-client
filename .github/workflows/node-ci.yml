@@ -1,0 +1,57 @@
+name: Node CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  # The release workflow runs the same checks on the tagged commit.
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  DO_NOT_TRACK: "1"
+
+jobs:
+  check:
+    name: Type-check & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dependency tree is valid (peer ranges satisfied)
+        run: npm ls --all >/dev/null
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Lint JS (eslint)
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build declarations
+        run: npm run build
+
+      - name: Package contents
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "
+            const [p] = JSON.parse(require('fs').readFileSync('pack.json', 'utf8'))
+            const files = p.files.map((f) => f.path)
+            for (const f of ['src/index.ts', 'src/sui.ts', 'dist/index.d.ts', 'dist/sui.d.ts', 'package.json']) if (!files.includes(f)) { console.error('missing from the tarball:', f); process.exit(1) }
+            const stray = files.filter((f) => !/^(src\\/|dist\\/|package\\.json\$|LICENSE\$|README\\.md\$|CHANGELOG\\.md\$|SECURITY\\.md\$)/.test(f))
+            if (stray.length) { console.error('unexpected files in the tarball:', stray); process.exit(1) }
+          "

@@ -1,0 +1,57 @@
+{
+  "name": "@meddleware/chain-payments-client",
+  "version": "0.0.1",
+  "description": "TypeScript SDK for Chain Payments: the checkout session API and per-chain payment transaction builders (Sui first).",
+  "license": "0BSD",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meddleware-org/chain-payments-client.git"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./sui": {
+      "types": "./dist/sui.d.ts",
+      "default": "./src/sui.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "dist",
+    "CHANGELOG.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint:js": "eslint .",
+    "lint": "npm run lint:js"
+  },
+  "peerDependencies": {
+    "@mysten/sui": "^2.35.0"
+  },
+  "peerDependenciesMeta": {
+    "@mysten/sui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mysten/sui": "^2.39.1",
+    "@types/node": "~26.6.5",
+    "eslint": "^10.11.0",
+    "jiti": "^2.7.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "~5.0.2"
+  }
+}
