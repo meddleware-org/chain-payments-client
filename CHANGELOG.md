@@ -2,6 +2,10 @@
 
 ## Unreleased (first pass of the security audit, 2026-11-17; ships in the first npm release, 0.0.1)
 
+- The testnet package is `0x610cf31f…6af2` (fresh, immutable, with the platform fee). `pay<T>` takes its
+  `PlatformConfig` (`SUI_PLATFORM_CONFIGS`, built in) as the first argument.
+- `readPlatformFee(client, quote)` reads the rate and treasury from the chain and computes the fee, which is part of the
+  quoted amount, not on top of it. It refuses any other object, a rate above the package's 1 % ceiling, or a missing field.
 - A payment status `unapplied`: the transaction paid a checkout that was already paid or cancelled; the merchant credits
   or refunds it.
 - The Chain Payments package ids are built in per network (`SUI_PACKAGES`). A method that names another package, or a

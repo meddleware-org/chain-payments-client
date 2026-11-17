@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ChainPaymentsError, createSessionClient, loadChain, supported } from '../src/index'
-import { buildPayTransaction } from '../src/sui'
+import { SUI_PLATFORM_CONFIGS, buildPayTransaction, readPlatformFee } from '../src/sui'
 import type { Quote } from '../src/types'
 import { bcs } from '@mysten/sui/bcs'
 import { fromBase64, normalizeSuiAddress } from '@mysten/sui/utils'
@@ -23,8 +23,8 @@ const quote: Quote = {
   session: SESSION,
   method: {
     id: 'sui-testnet:SUI', chain: 'sui', network: 'testnet', symbol: 'SUI', decimals: 9, coinType: '0x2::sui::SUI',
-    packageId: '0x5f67109c6b436fc0c0415d7f3e63ca10d374d8c4bb5e3b1f087cabb1c785bc14',
-    merchantObject: '0x30b6d544652d35d4a481fa7e45adf8e514b9ae1596377e837b6fdf36d967dae8',
+    packageId: '0x610cf31fa9455893f1d0d139e6aa6ca4559a9f2acf07391c0d47c4e86a9c6af2',
+    merchantObject: '0xd92a3ce208124219667d5b17a939617cc4dc816c093b91fd80f1f164e635d5e5',
   },
   amount: '5542213191',
   amountText: '5.542213191 SUI',
@@ -92,12 +92,12 @@ describe('Sui payment', () => {
     expect(call?.MoveCall?.function).toBe('pay')
     expect(call?.MoveCall?.module).toBe('chain_payments')
     expect(call?.MoveCall?.typeArguments).toEqual(['0x2::sui::SUI'])
-    expect(call?.MoveCall?.arguments).toHaveLength(11)
+    expect(call?.MoveCall?.arguments).toHaveLength(12)
   })
 
   it('passes every argument of pay<T> in the Move order, with the quote values', () => {
-    // chain_payments::pay<T>(merchant, session, amount, units, period_ms, subscription_ref, expires_ms, nonce, signature,
-    //                        payment: Coin<T>, clock)
+    // chain_payments::pay<T>(config, merchant, session, amount, units, period_ms, subscription_ref, expires_ms, nonce,
+    //                        signature, payment: Coin<T>, clock)
     const data = buildPayTransaction(quote).getData()
     const call = data.commands.find((c) => c.$kind === 'MoveCall')!.MoveCall!
     expect(normalizeSuiAddress(call.package)).toBe(normalizeSuiAddress(quote.method.packageId))
@@ -113,18 +113,19 @@ describe('Sui payment', () => {
     const pure = (i: number) => fromBase64(input(i).Pure!.bytes)
     const u64 = (i: number) => bcs.u64().parse(pure(i))
     const bytes = (i: number) => new TextDecoder().decode(Uint8Array.from(bcs.vector(bcs.u8()).parse(pure(i))))
-    expect(object(0)).toBe(normalizeSuiAddress(quote.method.merchantObject))
-    expect(bytes(1)).toBe(quote.session)
-    expect(u64(2)).toBe(quote.amount)
-    expect(u64(3)).toBe(String(quote.units))
-    expect(u64(4)).toBe(quote.periodMs)
-    expect(bytes(5)).toBe(quote.subscriptionRef)
-    expect(u64(6)).toBe(quote.expiresMs)
-    expect(bytes(7)).toBe(quote.nonce)
-    expect(Uint8Array.from(bcs.vector(bcs.u8()).parse(pure(8)))).toEqual(Uint8Array.from({ length: 64 }, () => 0xab))
+    expect(object(0)).toBe(normalizeSuiAddress(SUI_PLATFORM_CONFIGS.testnet!))
+    expect(object(1)).toBe(normalizeSuiAddress(quote.method.merchantObject))
+    expect(bytes(2)).toBe(quote.session)
+    expect(u64(3)).toBe(quote.amount)
+    expect(u64(4)).toBe(String(quote.units))
+    expect(u64(5)).toBe(quote.periodMs)
+    expect(bytes(6)).toBe(quote.subscriptionRef)
+    expect(u64(7)).toBe(quote.expiresMs)
+    expect(bytes(8)).toBe(quote.nonce)
+    expect(Uint8Array.from(bcs.vector(bcs.u8()).parse(pure(9)))).toEqual(Uint8Array.from({ length: 64 }, () => 0xab))
     // The coin comes from coinWithBalance (an intent resolved at build time), never a raw object of the payer's choosing.
-    expect(call.arguments[9]!.$kind).not.toBe('Input')
-    expect(object(10)).toBe(normalizeSuiAddress('0x6'))
+    expect(call.arguments[10]!.$kind).not.toBe('Input')
+    expect(object(11)).toBe(normalizeSuiAddress('0x6'))
   })
 
   it('refuses expired, malformed and foreign quotes', () => {
@@ -138,5 +139,30 @@ describe('Sui payment', () => {
     expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, packageId: `0x${'ab'.repeat(32)}` } })).toThrow('not this release')
     expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, network: 'mainnet' } })).toThrow('no Chain Payments package')
     expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, network: 'constructor' } })).toThrow('no Chain Payments package')
+  })
+})
+
+describe('platform fee', () => {
+  const reader = (object: { objectId: string; type?: string; json?: Record<string, unknown> }) => ({
+    core: { getObject: vi.fn(async () => ({ object })) },
+  })
+  const config = {
+    objectId: SUI_PLATFORM_CONFIGS.testnet!,
+    type: '0x610cf31fa9455893f1d0d139e6aa6ca4559a9f2acf07391c0d47c4e86a9c6af2::chain_payments::PlatformConfig',
+    json: { fee_bps: '20', treasury: '0xA991ae11b0785718cd3ad1c616e804a4c083f431b3144bb845bdec651164864a' },
+  }
+
+  it('reads the rate and treasury from the chain and computes the fee out of the quoted amount', async () => {
+    const r = reader(config)
+    const f = await readPlatformFee(r, quote)
+    expect(r.core.getObject).toHaveBeenCalledWith({ objectId: SUI_PLATFORM_CONFIGS.testnet, include: { json: true } })
+    expect(f).toEqual({ treasury: '0xa991ae11b0785718cd3ad1c616e804a4c083f431b3144bb845bdec651164864a', feeBps: 20, fee: 11084426n })
+  })
+
+  it('refuses another object, a rate above the ceiling and an unknown network', async () => {
+    await expect(readPlatformFee(reader({ ...config, type: '0xbad::chain_payments::PlatformConfig' }), quote)).rejects.toThrow('not this release')
+    await expect(readPlatformFee(reader({ ...config, json: { ...config.json, fee_bps: '101' } }), quote)).rejects.toThrow('could not be read')
+    await expect(readPlatformFee(reader({ ...config, json: { treasury: config.json.treasury } }), quote)).rejects.toThrow('could not be read')
+    await expect(readPlatformFee(reader(config), { ...quote, method: { ...quote.method, network: 'mainnet' } })).rejects.toThrow('no Chain Payments package')
   })
 })

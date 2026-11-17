@@ -13,7 +13,12 @@ import type { Quote } from './types.js'
  * package: a service that names another one is refused, so a compromised service cannot have the wallet call other code.
  */
 export const SUI_PACKAGES: Readonly<Record<string, string>> = Object.freeze({
-  testnet: '0x5f67109c6b436fc0c0415d7f3e63ca10d374d8c4bb5e3b1f087cabb1c785bc14',
+  testnet: '0x610cf31fa9455893f1d0d139e6aa6ca4559a9f2acf07391c0d47c4e86a9c6af2',
+})
+
+/** Each package's shared `PlatformConfig` (the platform fee's rate and treasury), passed to every payment. */
+export const SUI_PLATFORM_CONFIGS: Readonly<Record<string, string>> = Object.freeze({
+  testnet: '0x7e3b9a5c5346850d0703df88fcab044644c3e92b84a65e59b4661ef0e7b96106',
 })
 
 const MAX_U64 = (1n << 64n) - 1n
@@ -55,10 +60,12 @@ export function buildPayTransaction(quote: Quote, now: number = Date.now()): Tra
   const tx = new Transaction()
   const coin = coinWithBalance({ type: m.coinType, balance: amount })
   const bytes = (b: Uint8Array) => tx.pure.vector('u8', Array.from(b))
+  const config = SUI_PLATFORM_CONFIGS[m.network]!
   tx.moveCall({
     target: `${pkg}::chain_payments::pay`,
     typeArguments: [m.coinType],
     arguments: [
+      tx.object(config),
       tx.object(objectId('merchantObject', m.merchantObject)),
       bytes(utf8(quote.session)),
       tx.pure.u64(amount),
@@ -78,4 +85,48 @@ export function buildPayTransaction(quote: Quote, now: number = Date.now()): Tra
 export const suiChain: ChainModule<Transaction> = {
   chain: 'sui',
   buildPayment: (quote) => buildPayTransaction(quote),
+}
+
+/** The part of a Sui client this needs (`SuiGrpcClient` and the wallet adapter's client both have it). */
+export interface SuiObjectReader {
+  core: {
+    getObject(options: { objectId: string; include?: { json?: boolean } }): Promise<{
+      object: { objectId: string; type?: string; json?: Record<string, unknown> | null }
+    }>
+  }
+}
+
+/** What a payment pays the platform: read from this release's `PlatformConfig` on the chain. */
+export interface PlatformFee {
+  treasury: string
+  feeBps: number
+  /** In the coin's smallest unit; part of the quoted amount, not on top of it. */
+  fee: bigint
+}
+
+const bareId = (a: string) => a.toLowerCase().replace(/^0x/, '').replace(/^0+/, '')
+
+/**
+ * The platform fee a quote's payment will pay, read from the chain (show it before signing, and read it again just
+ * before). The object must be this release's `PlatformConfig` of this release's package, with a rate inside the
+ * package's 1 % ceiling; anything else is an error, never a guess.
+ */
+export async function readPlatformFee(client: SuiObjectReader, quote: Quote): Promise<PlatformFee> {
+  const network = quote.method.network
+  const pkg = Object.hasOwn(SUI_PACKAGES, network) ? SUI_PACKAGES[network]! : undefined
+  const id = Object.hasOwn(SUI_PLATFORM_CONFIGS, network) ? SUI_PLATFORM_CONFIGS[network]! : undefined
+  if (!pkg || !id) throw new Error(`no Chain Payments package on Sui ${network} in this release`)
+  const { object } = await client.core.getObject({ objectId: id, include: { json: true } })
+  const [addr, mod, name] = (object?.type ?? '').split('::')
+  if (!addr || bareId(addr) !== bareId(pkg) || mod !== 'chain_payments' || name !== 'PlatformConfig') {
+    throw new Error(`${id} is not this release's PlatformConfig`)
+  }
+  // A missing field is an error, never a default (a missing rate must not read as "no fee").
+  const raw = object.json?.fee_bps
+  const treasury = typeof object.json?.treasury === 'string' ? object.json.treasury : ''
+  const bps = (typeof raw === 'string' && /^[0-9]{1,3}$/.test(raw)) || (typeof raw === 'number' && Number.isInteger(raw)) ? Number(raw) : NaN
+  if (!(bps >= 0 && bps <= 100) || !/^0x[0-9a-fA-F]{1,64}$/.test(treasury)) {
+    throw new Error('the PlatformConfig could not be read')
+  }
+  return { treasury: treasury.toLowerCase(), feeBps: bps, fee: (u64('amount', quote.amount) * BigInt(bps)) / 10_000n }
 }
