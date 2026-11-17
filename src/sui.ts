@@ -7,6 +7,15 @@ import { Transaction, coinWithBalance } from '@mysten/sui/transactions'
 import type { ChainModule } from './index.js'
 import type { Quote } from './types.js'
 
+/**
+ * The Chain Payments package on each Sui network, built into this release. Every package release is a fresh, immutable
+ * package (its UpgradeCap burned), so a new package means a new client release. The service's method must name this
+ * package: a service that names another one is refused, so a compromised service cannot have the wallet call other code.
+ */
+export const SUI_PACKAGES: Readonly<Record<string, string>> = Object.freeze({
+  testnet: '0x5f67109c6b436fc0c0415d7f3e63ca10d374d8c4bb5e3b1f087cabb1c785bc14',
+})
+
 const MAX_U64 = (1n << 64n) - 1n
 const CLOCK = '0x6'
 
@@ -38,7 +47,11 @@ export function buildPayTransaction(quote: Quote, now: number = Date.now()): Tra
   const amount = u64('amount', quote.amount)
   if (amount === 0n) throw new Error('the amount is zero')
   if (!/^0x[0-9a-fA-F]{1,64}::[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*$/.test(m.coinType)) throw new Error('not a coin type')
-  const pkg = objectId('packageId', m.packageId)
+  const pkg = Object.hasOwn(SUI_PACKAGES, m.network) ? SUI_PACKAGES[m.network]! : undefined
+  if (!pkg) throw new Error(`no Chain Payments package on Sui ${m.network} in this release`)
+  if (objectId('packageId', m.packageId).replace(/^0x0*/, '') !== pkg.replace(/^0x0*/, '')) {
+    throw new Error(`the service names package ${m.packageId}, not this release's ${pkg} on ${m.network}`)
+  }
   const tx = new Transaction()
   const coin = coinWithBalance({ type: m.coinType, balance: amount })
   const bytes = (b: Uint8Array) => tx.pure.vector('u8', Array.from(b))

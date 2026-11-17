@@ -418,8 +418,9 @@ Unit tests only. There are no env-gated integration tests: an ABI-drift test aga
 
 ## Open questions (`OQ#`)
 
-- **OQ1** — For self-hosted operators with their own `chain_payments` package, should the SDK accept caller-supplied package
-  ids (`allowPackageIds`), or require operators to use a build of the SDK with their own deployments? (F4)
+- **OQ1** — DECIDED 2026-11-17 (maintainer): no option to supply package ids. The ids are built into each release
+  (`SUI_PACKAGES` in `src/sui.ts`), and a method naming another package is refused. A self-hosting developer can edit that
+  table in their own fork; nothing configures it.
 
 ## Risks (residual)
 

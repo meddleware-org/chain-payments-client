@@ -134,5 +134,9 @@ describe('Sui payment', () => {
     expect(() => buildPayTransaction({ ...quote, signature: 'zz' })).toThrow('signature')
     expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, chain: 'eth' } })).toThrow('not a Sui method')
     expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, packageId: 'evil' } })).toThrow('packageId')
+    // A well-formed id of another package (a compromised or misconfigured service) is refused, as is an unknown network.
+    expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, packageId: `0x${'ab'.repeat(32)}` } })).toThrow('not this release')
+    expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, network: 'mainnet' } })).toThrow('no Chain Payments package')
+    expect(() => buildPayTransaction({ ...quote, method: { ...quote.method, network: 'constructor' } })).toThrow('no Chain Payments package')
   })
 })
