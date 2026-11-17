@@ -31,7 +31,7 @@ export interface SessionClientOptions {
 
 const SESSION_ID = /^[0-9a-f]{32}$/
 const MAX_BODY = 64 * 1024
-const PAYMENT_STATUSES: readonly PaymentStatus[] = ['pending', 'confirmed', 'rejected']
+const PAYMENT_STATUSES: readonly PaymentStatus[] = ['pending', 'confirmed', 'rejected', 'unapplied']
 
 /** A payment status from the service, or an error: an unknown value never reads as final. */
 function paymentStatus(v: unknown, httpStatus = 502): PaymentStatus {
@@ -44,7 +44,7 @@ export interface SessionClient {
   requestQuote(sessionId: string, methodId: string): Promise<Quote>
   submitPayment(sessionId: string, nonce: string, digest: string): Promise<PaymentStatus>
   paymentStatus(sessionId: string, digest: string): Promise<PaymentStatus>
-  /** Polls until the payment is confirmed or rejected (or `timeoutMs` passes: then `pending`). */
+  /** Polls until the payment is no longer pending (or `timeoutMs` passes: then `pending`). */
   waitForPayment(sessionId: string, digest: string, opts?: { timeoutMs?: number; intervalMs?: number }): Promise<PaymentStatus>
 }
 

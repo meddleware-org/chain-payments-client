@@ -45,4 +45,8 @@ export interface Quote {
   signature: string
 }
 
-export type PaymentStatus = 'pending' | 'confirmed' | 'rejected'
+/**
+ * `unapplied`: the transaction paid, but for a checkout already paid or cancelled. The merchant is told and decides
+ * whether to credit or refund it; nothing is refunded automatically.
+ */
+export type PaymentStatus = 'pending' | 'confirmed' | 'rejected' | 'unapplied'

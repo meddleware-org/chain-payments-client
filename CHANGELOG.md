@@ -2,6 +2,8 @@
 
 ## Unreleased (first pass of the security audit, 2026-11-17; ships in the first npm release, 0.0.1)
 
+- A payment status `unapplied`: the transaction paid a checkout that was already paid or cancelled; the merchant credits
+  or refunds it.
 - The Chain Payments package ids are built in per network (`SUI_PACKAGES`). A method that names another package, or a
   network without a package in this release, is refused, so the service cannot choose the code the wallet calls.
 - Chain names from the service are looked up as own keys only (`Object.hasOwn`), so `constructor` or `__proto__` never
