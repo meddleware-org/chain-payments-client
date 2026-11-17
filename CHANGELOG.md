@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (first pass of the security audit, 2026-11-17; ships in the first npm release, 0.0.1)
+## 0.0.1 — 2026-11-17 (first npm release)
+
+After the first pass of the security audit:
 
 - The testnet package is `0x610cf31f…6af2` (fresh, immutable, with the platform fee). `pay<T>` takes its
   `PlatformConfig` (`SUI_PLATFORM_CONFIGS`, built in) as the first argument.
@@ -15,7 +17,7 @@
 - A payment status other than `pending`, `confirmed` or `rejected`, or a reply that is not a JSON object, is an error.
 - Tests: the `pay<T>` call is checked argument by argument (values and Move order), not only by count.
 
-## 0.0.1 — 2026-11-16
+First built 2026-11-16:
 
 - First release: the session client (read, quote, submit, wait), on-demand chain modules, the Sui payment builder
   (`chain_payments::pay<T>` with `coinWithBalance`). A client-built transaction was executed on testnet
