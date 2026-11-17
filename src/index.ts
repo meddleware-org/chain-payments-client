@@ -10,6 +10,7 @@
 export type { CheckoutSession, PaymentMethod, PaymentStatus, Quote, SessionStatus } from './types.js'
 import type { CheckoutSession, PaymentStatus, Quote } from './types.js'
 
+
 export class ChainPaymentsError extends Error {
   constructor(
     message: string,
@@ -30,6 +31,13 @@ export interface SessionClientOptions {
 
 const SESSION_ID = /^[0-9a-f]{32}$/
 const MAX_BODY = 64 * 1024
+const PAYMENT_STATUSES: readonly PaymentStatus[] = ['pending', 'confirmed', 'rejected']
+
+/** A payment status from the service, or an error: an unknown value never reads as final. */
+function paymentStatus(v: unknown, httpStatus = 502): PaymentStatus {
+  if (typeof v === 'string' && (PAYMENT_STATUSES as readonly string[]).includes(v)) return v as PaymentStatus
+  throw new ChainPaymentsError('the service returned an unknown payment status', httpStatus)
+}
 
 export interface SessionClient {
   getSession(id: string): Promise<CheckoutSession>
@@ -63,7 +71,10 @@ export function createSessionClient(opts: SessionClientOptions): SessionClient {
       })
       const text = await r.text()
       if (text.length > MAX_BODY) throw new ChainPaymentsError('the reply is too large', r.status)
-      const json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+      const parsed: unknown = text ? JSON.parse(text) : {}
+      // Every reply is a JSON object; anything else (an array, a bare value, null) is refused before any field is read.
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new ChainPaymentsError('the reply is not an object', r.status)
+      const json = parsed as Record<string, unknown>
       if (!r.ok) throw new ChainPaymentsError(typeof json.error === 'string' ? json.error : `HTTP ${r.status}`, r.status)
       return json as T
     } finally {
@@ -84,9 +95,9 @@ export function createSessionClient(opts: SessionClientOptions): SessionClient {
       return q
     },
     submitPayment: async (sessionId, nonce, digest) =>
-      (await call<{ status: PaymentStatus }>(`/v1/sessions/${sid(sessionId)}/payments`, { method: 'POST', body: { nonce, digest } })).status,
+      paymentStatus((await call<{ status: unknown }>(`/v1/sessions/${sid(sessionId)}/payments`, { method: 'POST', body: { nonce, digest } })).status),
     paymentStatus: async (sessionId, digest) =>
-      (await call<{ status: PaymentStatus }>(`/v1/sessions/${sid(sessionId)}/payments/${encodeURIComponent(digest)}`)).status,
+      paymentStatus((await call<{ status: unknown }>(`/v1/sessions/${sid(sessionId)}/payments/${encodeURIComponent(digest)}`)).status),
     waitForPayment: async (sessionId, digest, o = {}) => {
       const end = Date.now() + (o.timeoutMs ?? 60_000)
       for (;;) {
@@ -110,13 +121,16 @@ export const CHAINS: Record<string, () => Promise<ChainModule>> = {
   sui: async () => (await import('./sui.js')).suiChain,
 }
 
+/** The chain name comes from the service: an own key only, so `constructor` or `__proto__` never resolve to a prototype member. */
+const isChain = (chain: string): boolean => Object.hasOwn(CHAINS, chain)
+
 export async function loadChain(chain: string): Promise<ChainModule> {
-  const load = CHAINS[chain]
+  const load = isChain(chain) ? CHAINS[chain] : undefined
   if (!load) throw new Error(`this version cannot pay on ${chain}; update @meddleware/chain-payments-client`)
   return load()
 }
 
 /** True if every method's chain is supported by this version (a checkout hides the rest). */
 export function supported(methods: { chain: string }[]): boolean[] {
-  return methods.map((m) => m.chain in CHAINS)
+  return methods.map((m) => isChain(m.chain))
 }

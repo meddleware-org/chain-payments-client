@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ChainPaymentsError, createSessionClient, loadChain, supported } from '../src/index'
 import { buildPayTransaction } from '../src/sui'
 import type { Quote } from '../src/types'
+import { bcs } from '@mysten/sui/bcs'
+import { fromBase64, normalizeSuiAddress } from '@mysten/sui/utils'
 
 const SESSION = '0123456789abcdef0123456789abcdef'
 
@@ -62,6 +64,23 @@ describe('session client', () => {
     expect((await loadChain('sui')).chain).toBe('sui')
     await expect(loadChain('solana')).rejects.toThrow('cannot pay on solana')
     expect(supported([{ chain: 'sui' }, { chain: 'eth' }])).toEqual([true, false])
+    // Names from the service never reach Object.prototype.
+    for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      expect(supported([{ chain: name }])).toEqual([false])
+      await expect(loadChain(name)).rejects.toThrow('cannot pay on')
+    }
+  })
+
+  it('never reads an unknown payment status, or a reply that is not an object, as an answer', async () => {
+    const { f } = fakeFetch({
+      [`POST /v1/sessions/${SESSION}/payments`]: [200, { status: 'paid' }],
+      [`GET /v1/sessions/${SESSION}/payments/D1`]: [200, ['confirmed']],
+      [`GET /v1/sessions/${SESSION}/payments/D2`]: [200, { status: 'confirmed' }],
+    })
+    const c = createSessionClient({ baseUrl: 'https://pay.example.org', fetch: f })
+    await expect(c.submitPayment(SESSION, quote.nonce, 'D1')).rejects.toThrow('unknown payment status')
+    await expect(c.paymentStatus(SESSION, 'D1')).rejects.toThrow('not an object')
+    expect(await c.paymentStatus(SESSION, 'D2')).toBe('confirmed')
   })
 })
 
@@ -74,6 +93,38 @@ describe('Sui payment', () => {
     expect(call?.MoveCall?.module).toBe('chain_payments')
     expect(call?.MoveCall?.typeArguments).toEqual(['0x2::sui::SUI'])
     expect(call?.MoveCall?.arguments).toHaveLength(11)
+  })
+
+  it('passes every argument of pay<T> in the Move order, with the quote values', () => {
+    // chain_payments::pay<T>(merchant, session, amount, units, period_ms, subscription_ref, expires_ms, nonce, signature,
+    //                        payment: Coin<T>, clock)
+    const data = buildPayTransaction(quote).getData()
+    const call = data.commands.find((c) => c.$kind === 'MoveCall')!.MoveCall!
+    expect(normalizeSuiAddress(call.package)).toBe(normalizeSuiAddress(quote.method.packageId))
+    const input = (i: number) => {
+      const a = call.arguments[i]!
+      if (a.$kind !== 'Input') throw new Error(`argument ${i} is not an input`)
+      return data.inputs[a.Input]!
+    }
+    const object = (i: number) => {
+      const x = input(i)
+      return normalizeSuiAddress(x.UnresolvedObject?.objectId ?? x.Object?.SharedObject?.objectId ?? '')
+    }
+    const pure = (i: number) => fromBase64(input(i).Pure!.bytes)
+    const u64 = (i: number) => bcs.u64().parse(pure(i))
+    const bytes = (i: number) => new TextDecoder().decode(Uint8Array.from(bcs.vector(bcs.u8()).parse(pure(i))))
+    expect(object(0)).toBe(normalizeSuiAddress(quote.method.merchantObject))
+    expect(bytes(1)).toBe(quote.session)
+    expect(u64(2)).toBe(quote.amount)
+    expect(u64(3)).toBe(String(quote.units))
+    expect(u64(4)).toBe(quote.periodMs)
+    expect(bytes(5)).toBe(quote.subscriptionRef)
+    expect(u64(6)).toBe(quote.expiresMs)
+    expect(bytes(7)).toBe(quote.nonce)
+    expect(Uint8Array.from(bcs.vector(bcs.u8()).parse(pure(8)))).toEqual(Uint8Array.from({ length: 64 }, () => 0xab))
+    // The coin comes from coinWithBalance (an intent resolved at build time), never a raw object of the payer's choosing.
+    expect(call.arguments[9]!.$kind).not.toBe('Input')
+    expect(object(10)).toBe(normalizeSuiAddress('0x6'))
   })
 
   it('refuses expired, malformed and foreign quotes', () => {
