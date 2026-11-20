@@ -22,3 +22,7 @@ npm ci && npm run type-check && npm run lint && npm test && npm run build
 ```
 
 Commit messages: one short line, no body, no trailer.
+
+## Interoperability
+
+- [docs/INTEROP.md](docs/INTEROP.md): the standards this project speaks, what is planned, where to extend it, and what proves each claim.

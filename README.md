@@ -20,3 +20,7 @@ The Sui module (`@meddleware/chain-payments-client/sui`) calls `chain_payments::
 amount; the package takes exactly that and returns change in the same transaction. `@mysten/sui` is a peer dependency.
 
 Licence: [0BSD](LICENSE).
+
+## Open standards
+
+What this project speaks, what is planned and where you can extend it: [docs/INTEROP.md](docs/INTEROP.md).
