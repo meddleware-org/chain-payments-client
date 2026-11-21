@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Documentation: every file is annotated line by line and has a header; added `CONTRIBUTING.md`; README Development section; CLAUDE.md Gotchas and Related; `SECURITY.md` now says the package id is
+  pinned (it has been since 0.0.1) and that the merchant object is not.
+- `tsconfig.json`, `tsconfig.build.json`, `vitest.config.ts`, `.gitignore`, the workflows and Dependabot configuration carry comments. No behaviour change: the declarations and the source's compiled output are identical.
+
 ## 0.0.1 — 2026-11-17 (first npm release)
 
 After the first pass of the security audit:

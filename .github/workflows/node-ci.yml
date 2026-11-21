@@ -1,3 +1,5 @@
+# Node CI for the Chain Payments client: install, dependency check, audit, type-check, lint, tests, the declaration build and a check of the tarball's contents, on
+# Node 26. It runs on every push to main and every pull request, and the release workflow (npm-publish.yml) calls it on the tagged commit, so a broken tag never ships.
 name: Node CI
 
 on:
@@ -7,9 +9,11 @@ on:
   # The release workflow runs the same checks on the tagged commit.
   workflow_call:
 
+# Read-only: CI needs nothing but the checkout.
 permissions:
   contents: read
 
+# No tool may phone home from CI (the fleet's privacy rule; npm, Node and other tools honour it).
 env:
   DO_NOT_TRACK: "1"
 
@@ -18,33 +22,44 @@ jobs:
     name: Type-check & test
     runs-on: ubuntu-latest
     steps:
+      # Actions are pinned by full commit SHA with the version in a comment (D12).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Node 26 is the fleet baseline (D56).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
 
+      # `npm ci` installs exactly the lockfile, so CI tests what was reviewed.
       - name: Install dependencies
         run: npm ci
 
+      # Fails if any dependency's peer range is not satisfied (`@mysten/sui` is an optional peer, installed here as a dev dependency).
       - name: Dependency tree is valid (peer ranges satisfied)
         run: npm ls --all >/dev/null
 
+      # High and critical advisories fail the build. This repository does not depend on @meddleware/frontend-config, so it does not use that package's gate
+      # (which adds an expiring allow-list); the threshold is the same, and there is no allow-list to keep.
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
+      # tsc over src/ and tests/ (the tests are included, so a type error in a test fails here).
       - name: Type-check
         run: npm run type-check
 
+      # eslint with the TypeScript rule set (there are no Vue files in this package).
       - name: Lint JS (eslint)
         run: npm run lint
 
+      # The offline unit tests (the fake-fetch session client and the Sui builder).
       - name: Test
         run: npm test
 
+      # The declarations in dist/, which the `types` entries of package.json point at.
       - name: Build declarations
         run: npm run build
 
+      # What `npm publish` would upload: the source and declarations the exports need must be there, and nothing outside the whitelist (no stray test, key or config).
       - name: Package contents
         run: |
           npm pack --dry-run --json > pack.json

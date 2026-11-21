@@ -1,11 +1,16 @@
+// The build behind `npm run build` and `prepublishOnly`: only the declarations (`dist/*.d.ts`), because the package ships its TypeScript source and the consumer's
+// bundler compiles it. The `types` entries in package.json's `exports` point at `dist/`.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    // Emission on (the base turns it off), but only declaration files.
     "noEmit": false,
     "declaration": true,
     "emitDeclarationOnly": true,
+    // Keep `dist/` flat (`dist/index.d.ts`, `dist/sui.d.ts`) instead of mirroring `src/`.
     "rootDir": "./src",
     "declarationDir": "./dist"
   },
+  // The source only: no tests in the published declarations.
   "include": ["src/**/*.ts"]
 }

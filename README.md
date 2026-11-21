@@ -19,6 +19,21 @@ const status = await pay.waitForPayment(sessionId, digest)             // 'confi
 The Sui module (`@meddleware/chain-payments-client/sui`) calls `chain_payments::pay<T>` with a coin of exactly the quoted
 amount; the package takes exactly that and returns change in the same transaction. `@mysten/sui` is a peer dependency.
 
+## Development
+
+The package ships its TypeScript source and the declarations (`dist/`). The checks all run in CI on every push (`.github/workflows/node-ci.yml`):
+
+```bash
+npm ci                           # install exactly the lockfile
+npm run type-check               # tsc over src/ and tests/
+npm run lint                     # eslint (typescript-eslint recommended)
+npm test                         # 9 offline unit tests: the session client against a fake fetch, and the Sui builder decoded argument by argument
+npm run build                    # the declarations in dist/
+npm audit --audit-level=high     # the dependency check
+```
+
+How to propose a change: [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Licence: [0BSD](LICENSE).
 
 ## Open standards

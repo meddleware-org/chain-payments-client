@@ -10,8 +10,9 @@ wallets.
 
 - The SDK builds transactions from quotes the Chain Payments service signs; the Move package verifies the signature, so a
   tampered quote cannot pay a different amount, session or reference than the service signed.
-- The service is trusted for the quote's package id and merchant object: the SDK does not yet pin them (see the audit,
-  FU-0123). A host that knows its merchant object should compare it with `quote.method.merchantObject` before signing.
+- The Chain Payments package id is built into each release (`SUI_PACKAGES`), and the builder refuses a method that names another package or a network without one, so the service
+  cannot choose the code the wallet calls. The merchant object is still the service's: the SDK does not pin it, so a host that knows its merchant object should compare it with
+  `quote.method.merchantObject` before signing.
 - The SDK checks every field it puts into the transaction (u64 ranges, hex, coin type and object id shapes, expiry), refuses
   replies that are not JSON objects or carry an unknown payment status, sends no credentials (`credentials: 'omit'`) and
   caches nothing. Every request has a timeout.

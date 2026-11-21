@@ -1,3 +1,4 @@
+# Dependencies, the declaration build (`npm run build` makes it), coverage reports and logs: none of them is committed.
 node_modules/
 dist/
 coverage/
