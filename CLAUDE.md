@@ -35,6 +35,10 @@ Commit messages: one short line, no body, no trailer.
 - **`@mysten/sui` is an optional peer**: only `./sui` imports it, and `CHAINS` loads that module on demand.
 - **There is no `mw-audit-gate`.** This repository does not depend on `@meddleware/frontend-config`; CI runs `npm audit --audit-level=high`.
 
+## Documentation rules (workspace documentation standard, D144)
+
+Every file has a header and every declaration a TSDoc comment (private declarations included); comments say why. `node scripts/check-docs.mjs --report chain-payments-client` (in the workspace repository) is the gate. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Related
 
 - The audit: [`docs/audit/chain-payments-client-audit.md`](docs/audit/chain-payments-client-audit.md).
